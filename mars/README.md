@@ -41,18 +41,27 @@ duckdb < scripts/measure.sql          # prints touched bytes + correctness per t
 
 `measure.sql` prints, for each query `qty >= a`, the baseline and refined bytes scanned,
 the refined read as a percentage of the baseline total, and a `PASS/FAIL` correctness
-check against a full-scan ground truth. Expected headline (baseline column-v total
-3,744,386 bytes):
+check against a full-scan ground truth. A representative run (DuckDB v1.5.1, baseline
+column-v total about 3.75 MB) prints:
 
 | `qty >=` | baseline | refined | reduction | correct |
 | --- | --- | --- | --- | --- |
 | 10  (control, already sparse) | 0.02% | 0.02% | none | PASS |
-| 1   | 100% | 0.43% | 234x | PASS |
-| 0.5 | 100% | 1.35% | 74x | PASS |
-| 0.1 | 100% | 16.0% | 6.3x | PASS |
+| 1   | 100% | ~0.42% | ~235x | PASS |
+| 0.5 | 100% | ~1.35% | ~74x | PASS |
+| 0.1 | 100% | ~15.9% | ~6.3x | PASS |
 
-The full measured transcript, including the USGS upper-bucket variant, is in
-[`results/results_dense.txt`](results/results_dense.txt).
+The `correct` column must read `PASS` on every row: the refinement is lossless, with zero
+false negatives, and that reproduces exactly (ground-truth row counts 43 / 2249 / 9688 /
+110679). The absolute byte counts, and therefore the percentages, depend on Parquet
+compression and can vary by roughly 1% across environments and DuckDB builds; the paper
+(Table 7) reports 0.43% and a 234x reduction for `qty >= 1` from its original run. What
+reproduces exactly is the correctness and the order of magnitude: for any `qty >= a` below
+1 BTC the refined layout reads a small fraction of the baseline that the clamped layout
+must scan in full.
+
+The full measured transcript from the original run, including the USGS upper-bucket
+variant, is in [`results/results_dense.txt`](results/results_dense.txt).
 
 ## Reference benchmark harness (other tables and figures)
 
