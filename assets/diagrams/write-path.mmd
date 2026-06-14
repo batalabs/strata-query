@@ -1,0 +1,6 @@
+flowchart LR
+    A[Row] --> B{Route each column}
+    B -->|"categorical → hash"| K[Segment key]
+    B -->|"numeric → ⌊log₂ v⌋"| K
+    K --> S["Segment (typed Parquet)"]
+    K --> M["Existence bitset<br/>+ column stats"]

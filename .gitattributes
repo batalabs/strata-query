@@ -1,0 +1,15 @@
+# Normalize line endings: store LF in the repository, auto-convert on checkout.
+* text=auto eol=lf
+
+# Rust/text sources are always LF.
+*.rs    text eol=lf
+*.toml  text eol=lf
+*.md    text eol=lf
+*.py    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+
+# Treat common binary types as binary (no EOL munging) if ever added.
+*.png   binary
+*.jpg   binary
+*.ico   binary

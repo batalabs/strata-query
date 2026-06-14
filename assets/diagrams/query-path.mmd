@@ -1,0 +1,5 @@
+flowchart LR
+    Q["SQL WHERE clause"] --> P1["1 · Segment pruning<br/>existence-bitset intersection"]
+    P1 --> P2["2 · Row-group pruning<br/>Parquet min/max stats"]
+    P2 --> P3["3 · Row filtering<br/>exact predicate match"]
+    P3 --> R["Results"]

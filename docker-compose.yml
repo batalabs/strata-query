@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  strata-rest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3131:3131"
+    volumes:
+      - strata-data:/app/strata_data
+    command: ["./strata_server"]
+
+  strata-flight:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "41415:41415"
+    volumes:
+      - strata-data:/app/strata_data
+    command: ["./strata_flight_server"]
+
+volumes:
+  strata-data:

@@ -1,0 +1,82 @@
+# ---------------------------------------------------------------------------
+# Rust
+# ---------------------------------------------------------------------------
+# Compiled output / build artifacts
+/target/
+# rustfmt backup files
+**/*.rs.bk
+# MSVC debug info
+*.pdb
+#
+# NOTE: Cargo.lock IS committed. STRATA ships binaries (strata_server,
+# strata_flight_server), so the lockfile belongs in version control for
+# reproducible builds. Do not ignore it.
+
+# ---------------------------------------------------------------------------
+# mdBook build output
+# ---------------------------------------------------------------------------
+/book/
+
+# ---------------------------------------------------------------------------
+# Not published in this repo (kept in the working tree, excluded from VCS)
+# ---------------------------------------------------------------------------
+# Documentation site / mdBook source, not part of the core crate release.
+docs/
+# mdBook config (its `docs/` source is excluded above).
+book.toml
+# Formal proofs (paper material), kept private.
+proofs/
+# Python client: separate concern, not shipped with the core crate.
+python-client/
+# Holding pen for archived/experimental junk, never committed, never built.
+.exclude/
+# Agent/editor working state
+.claude/
+
+# ---------------------------------------------------------------------------
+# Python build artifacts (in case any Python lands in-tree)
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---------------------------------------------------------------------------
+# Generated data / benchmark output
+# ---------------------------------------------------------------------------
+nyc_taxi_strata/
+strata_data/
+strata_output/
+strata_middleware/
+*.parquet
+bench_results.txt
+*.csv
+
+# ---------------------------------------------------------------------------
+# Secrets / local environment (never commit credentials)
+# ---------------------------------------------------------------------------
+.env
+*.env
+*.pem
+*.key
+credentials
+.aws/
+
+# ---------------------------------------------------------------------------
+# Editors / IDEs
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ---------------------------------------------------------------------------
+# OS cruft
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db

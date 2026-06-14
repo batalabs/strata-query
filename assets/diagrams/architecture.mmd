@@ -1,0 +1,11 @@
+flowchart TB
+    subgraph Clients
+        H["REST / HTTP :3131"]
+        F["Arrow Flight SQL :41415"]
+    end
+    H --> QRY
+    F --> QRY
+    QRY["query · SQL → predicate"] --> RD["storage · reader<br/>(bitset pruning)"]
+    RD --> SEG[("Parquet segments<br/>+ existence-bitset metadata")]
+    WR["storage · writer + WAL"] --> SEG
+    RT["routing · hash + MARS ⌊log₂ v⌋"] --> WR

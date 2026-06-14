@@ -1,0 +1,5 @@
+# Pin the toolchain so local development and CI use the same compiler, rustfmt,
+# and clippy. Bump this in lockstep with the version exercised in CI.
+[toolchain]
+channel = "1.93.1"
+components = ["rustfmt", "clippy"]

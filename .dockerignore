@@ -1,0 +1,14 @@
+target/
+strata_data/
+*.parquet
+*.csv
+bench_results.txt
+.git/
+
+# Not needed to build the crate; keep the build context small.
+.exclude/
+docs/
+proofs/
+python-client/
+book/
+.github/
