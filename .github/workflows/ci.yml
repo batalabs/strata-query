@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+# Cancel in-progress runs for the same ref to save CI minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Fail the build on any warning everywhere, matching the local clippy gate.
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  ci:
+    name: fmt + clippy + test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Toolchain channel/components come from rust-toolchain.toml, so we do not
+      # pin them here - this keeps CI and local in lockstep with a single source.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test
