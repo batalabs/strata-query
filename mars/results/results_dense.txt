@@ -1,0 +1,117 @@
+================================================================================
+  MARS dense-bucket sub-routing refinement -- measured results
+================================================================================
+
+METHOD (honest, fully measured; no modeling where measurement was possible)
+--------------------------------------------------------------------------------
+Pure DuckDB CLI v1.5.1 (no Python on host). Methodology mirrors the reference
+harness strata/.exclude/staged-bins/mars_multi.rs:
+  - Values routed to magnitude buckets and written as one Parquet segment per
+    bucket via DuckDB COPY ... PARTITION_BY, matched ROW_GROUP_SIZE = 100000
+    (the RG constant in mars_multi.rs).
+  - "Bytes scanned" = SUM(total_compressed_size) of the column-v row-groups in
+    the touched segment files, read from real Parquet metadata
+    (parquet_metadata), exactly as mars_multi.rs col_bytes_total_one does.
+  - Magnitude pruning only: a touched bucket is read in FULL. A segment is
+    "touched" by a tail query v>=a iff its real value-max >= a (the same
+    min/max overlap test as mars_multi.rs bytes_overlap). This is the routing
+    decision a STRATA-style reader makes from segment statistics.
+  - Correctness: for each threshold the rows returned by reading ONLY the
+    touched segments and applying v>=a are compared to a full-scan ground truth
+    over the raw CSV. Equality => zero false negatives.
+
+Build / measure scripts (prototypes), in mars/experiments/:
+  dense_subroute.sql   writes baseline + refined BTC segments
+  measure.sql / ad-hoc verify SQL  computes touched bytes + correctness
+Reproduce: duckdb < experiments/dense_subroute.sql ; then the measure SQL.
+
+================================================================================
+HEADLINE: Binance BTC trade quantity (column2), 2024-01-15
+================================================================================
+Rows (positive qty): 1,657,611.  min 1e-5, p50 0.00108, p90 0.05, max 85.93 BTC.
+
+The dense-bucket failure (worse than feared): baseline clamps floor(log2 v) at
+0, so the entire sub-unit range collapses into bucket 0:
+    bucket 0 = 1,656,996 rows = 99.963% of all rows.
+Any query qty>=a with a<2 must read bucket 0 => baseline scans ~100% of bytes.
+
+REFINEMENT: bucket 0 is replaced by sub-buckets routed by TRUE (un-clamped)
+magnitude  sub(v)=clamp(floor(log2 v), -17, 0).  Floor -17 chosen because the
+smallest value (1e-5) has floor(log2)=-17, so NOTHING is clamped/lost.
+Boundaries stay powers of two => data-independent, atomic metadata change, no
+data re-sort. Bucket 0 splits into 18 sub-buckets (s-17 .. s0).
+
+Baseline total column-v bytes: 3,744,386 (denominator for "% of bytes" below).
+
+  qty>=   baseline                 refined                      correct
+          bytes      segs  %bytes  bytes     segs  %bytes        (ref vs full scan)
+  ----------------------------------------------------------------------------------
+  10.0    644         4    0.02%   644        4    0.02%   PASS  (control; already sparse)
+   1.0    3,744,386   7    100.0%  15,979     7    0.43%   PASS  <-- 100% -> 0.43% (234x)
+   0.5    3,744,386   7    100.0%  50,613     8    1.35%   PASS  <-- 100% -> 1.35% (74x)
+   0.1    3,744,386   7    100.0%  597,152   11    15.95%  PASS  <-- 100% -> 15.95% (6.3x)
+
+% is fraction of the BASELINE total bytes (true before/after for the same query).
+truth row-counts: qty>=10 ->43, >=1 ->2249, >=0.5 ->9688, >=0.1 ->110679; the
+refined reader returns EXACTLY these from the touched segments (zero false neg).
+
+The deeper into the sub-unit mass the threshold sits, the more sub-buckets it
+must touch, so the win shrinks monotonically (0.43% -> 1.35% -> 15.95%); but even
+at qty>=0.1 (110k rows, a 6.7%-selectivity query) the refinement reads 16% vs
+100%. At qty>=1 -- the paper's stated worst case -- MARS goes from losing to a
+plain scan (100%) to reading under half a percent.
+
+STORAGE / SEGMENT COST OF THE REFINEMENT
+--------------------------------------------------------------------------------
+  Segments: baseline 7 (b0..b6); refined 23 (6 upper buckets b1..b6 + 18 sub
+            buckets s-17..s0). Extra metadata = +16 segment entries.
+  STORAGE BYTES: baseline total 3,744,386 ; refined total 1,912,370.
+    => The refinement does NOT add storage -- it REDUCES it by ~49%. Splitting
+       bucket 0 by magnitude groups numerically-similar values together, which
+       Parquet compresses better. (Measured, not modeled.) So the only real cost
+       is +16 small segment files / metadata entries.
+
+================================================================================
+SECONDARY (upper-bucket variant): USGS earthquake depth (km), 2024
+================================================================================
+102,482 positive rows. No sub-unit pathology here (bucket 0 = 9.88%). The densest
+bucket is b3 = [8,16) km at 26.1%. We refine THAT bucket by within-bucket offset
+magnitude:  for v in [8,16),  o(v)=clamp(floor(log2(v-8)), -10, 2).  b3 splits
+into 13 offset sub-buckets (o-10..o2). Boundaries are 8+2^k (still data-indep.).
+
+Baseline total column-v bytes 273,323 ; refined total 265,300 (-2.9%).
+
+  depth>=  baseline               refined                  correct
+           bytes     segs         bytes     segs           (ref vs full scan)
+  ------------------------------------------------------------------------------
+   10.0    206,589   7            183,311   8        PASS   (in b3: -11.3%)
+   12.0    206,589   7            168,688   7        PASS   (in b3: -18.4%)
+   14.0    206,589   7            168,688   7        PASS   (in b3: -18.4%)
+  100.0     70,230   4             70,230   4        PASS   (above b3; no effect, control)
+
+The upper-bucket refinement is CORRECT and helps modestly (up to -18% bytes for a
+threshold landing inside b3). It helps far less than the BTC case because b3 is
+26% of data, not 99.96%: the payoff scales with how dense and how wide the
+refined bucket is.
+
+================================================================================
+HONEST CAVEATS
+================================================================================
+1. The refinement only helps when the query threshold falls INSIDE a dense
+   bucket that the refinement split. qty>=10 (BTC) and depth>=100 (USGS) are
+   already sparse / above the dense bucket: refined == baseline, no benefit and
+   no harm (control rows confirm this).
+2. Benefit decays as the threshold moves deeper into the dense mass (BTC:
+   0.43% -> 16% as qty drops 1 -> 0.1), because more sub-buckets overlap.
+3. The headline 100%->0.43% win is specific to a pathologically skewed column
+   (99.96% in one clamped bucket). USGS shows the realistic, non-pathological
+   ceiling is more like 10-20% byte reduction.
+4. Storage cost is the +N segment files/metadata entries, NOT bytes -- measured
+   total bytes went DOWN in both datasets due to better compression of
+   magnitude-grouped values.
+5. Bench wall-clock times were not the object here (the cost model is bytes
+   scanned, the cloud-OLAP metric); they are omitted rather than reported
+   imprecisely.
+
+Generated 2026-06-14 on Windows 11, DuckDB v1.5.1.
+================================================================================
